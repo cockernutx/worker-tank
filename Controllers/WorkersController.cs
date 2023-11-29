@@ -17,7 +17,7 @@ public class WorkersController : ControllerBase
             return _managerService.RegisterWorker(name);
         }
         catch(ManagerService.WorkerAlreadyRegisteredException) {
-            return BadRequest("Worker already created");
+            return Conflict("Worker already created");
         }
     }
 

@@ -27,8 +27,10 @@ public class ManagerService
         return id;
     }
 
-    public bool ValidateWorker(string worker, Guid pass) {
-        if(workersList.Contains(new KeyValuePair<string, Guid>(worker, pass))) {
+    public bool ValidateWorker(string worker, Guid pass)
+    {
+        if (workersList.Contains(new KeyValuePair<string, Guid>(worker, pass)))
+        {
             return true;
         }
         return false;
@@ -49,24 +51,37 @@ public class ManagerService
         return uuid;
     }
 
+    public void ChangeJobStatus(JobStatus status, Guid job)
+    {
+        var jobIndex = CheckJob(job).Item2;
+        jobs[jobIndex].Status = status;
+    }
+
     public void RemoveJob(Guid jobID)
     {
-        var jobToRemove = jobs.Find(x => x.JobID == jobID);
-        if (jobToRemove == null)
-        {
-            throw new JobNotFoundException();
-        }
-        jobs.Remove(jobToRemove);
+        var jobToRemove = CheckJob(jobID);
+        jobs.Remove(jobToRemove.Item1);
     }
 
     public JobInfo? FindJob(Guid jobID) =>
         jobs.Find(x => x.JobID == jobID);
 
-    public List<JobInfo> WorkerJobs(string worker) {
+    public List<JobInfo> WorkerJobs(string worker)
+    {
         var list = jobs.FindAll(x => x.WorkerName == worker);
         return list;
     }
+    private (JobInfo, int) CheckJob(Guid job)
+    {
+        var fnd = jobs.Find(x => x.JobID == job);
+        if (fnd == null)
+        {
+            throw new JobNotFoundException();
+        }
+        var idx = jobs.IndexOf(fnd);
+        return (fnd, idx);
 
+    }
     private void CheckWorker(string worker)
     {
         if (!workersList.ContainsKey(worker))

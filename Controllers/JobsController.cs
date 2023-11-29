@@ -25,7 +25,7 @@ public class JobsController : ControllerBase
         }
         catch (ManagerService.WorkerNotFoundException)
         {
-            return BadRequest("Worker not found!");
+            return NotFound("Worker not found!");
         }
     }
     [HttpGet("{uuid}")]
@@ -41,7 +41,24 @@ public class JobsController : ControllerBase
         return _jobManager.WorkerJobs(workerName);
     }
 
+    [HttpPatch("ProcessingJob/{uuid}")]
+    public IActionResult ProcessingJob(Guid uuid, [FromBody] WorkerInfo workerInfo) {
+        bool workerValidation = _jobManager.ValidateWorker(workerInfo.WorkerName, workerInfo.Pass);
+        if(!workerValidation) return Unauthorized();
+        try {
+            _jobManager.ChangeJobStatus(JobStatus.Processing, uuid);
+        }
+        catch {
+            return NotFound("Job not found");
+        }
+        return Ok();
+    }
 
+}
+
+public class WorkerInfo {
+    public required string WorkerName {get; set;}
+    public required Guid Pass {get; set;}
 }
 
 public class JobRequest
