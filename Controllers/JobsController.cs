@@ -34,21 +34,40 @@ public class JobsController : ControllerBase
 
 
     [HttpGet("WorkerJobs")]
-    public ActionResult<List<JobInfo>> FetchJobs(string workerName, Guid pass) {
+    public ActionResult<List<JobInfo>> FetchJobs(string workerName, Guid pass)
+    {
         bool workerValidation = _jobManager.ValidateWorker(workerName, pass);
-        if(!workerValidation) return Unauthorized();
+        if (!workerValidation) return Unauthorized();
 
         return _jobManager.WorkerJobs(workerName);
     }
 
     [HttpPatch("ProcessingJob/{uuid}")]
-    public IActionResult ProcessingJob(Guid uuid, [FromBody] WorkerInfo workerInfo) {
+    public IActionResult ProcessingJob(Guid uuid, [FromBody] WorkerInfo workerInfo)
+    {
         bool workerValidation = _jobManager.ValidateWorker(workerInfo.WorkerName, workerInfo.Pass);
-        if(!workerValidation) return Unauthorized();
-        try {
+        if (!workerValidation) return Unauthorized();
+        try
+        {
             _jobManager.ChangeJobStatus(JobStatus.Processing, uuid);
         }
-        catch {
+        catch
+        {
+            return NotFound("Job not found");
+        }
+        return Ok();
+    }
+    [HttpPatch("FinishJob/{uuid}")]
+    public IActionResult FinishJob(Guid uuid, [FromBody] FinishJobRequest finishInfo)
+    {
+        bool workerValidation = _jobManager.ValidateWorker(finishInfo.WorkerName, finishInfo.Pass);
+        if (!workerValidation) return Unauthorized();
+        try
+        {
+            _jobManager.FinishJob(uuid, finishInfo.JobData);
+        }
+        catch
+        {
             return NotFound("Job not found");
         }
         return Ok();
@@ -56,9 +75,17 @@ public class JobsController : ControllerBase
 
 }
 
-public class WorkerInfo {
-    public required string WorkerName {get; set;}
-    public required Guid Pass {get; set;}
+public class FinishJobRequest
+{
+    public required string WorkerName { get; set; }
+    public required Guid Pass { get; set; }
+    public dynamic? JobData { get; set; }
+}
+
+public class WorkerInfo
+{
+    public required string WorkerName { get; set; }
+    public required Guid Pass { get; set; }
 }
 
 public class JobRequest

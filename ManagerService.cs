@@ -56,6 +56,10 @@ public class ManagerService
         var jobIndex = CheckJob(job).Item2;
         jobs[jobIndex].Status = status;
     }
+    public void FinishJob(Guid job, dynamic data) {
+        var jobIndex = CheckJob(job).Item2;
+        jobs[jobIndex].JobData = data;
+    }
 
     public void RemoveJob(Guid jobID)
     {
