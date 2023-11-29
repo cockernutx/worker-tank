@@ -1,0 +1,17 @@
+FROM  mcr.microsoft.com/dotnet/sdk:8.0
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+WORKDIR /src
+ADD . .
+
+RUN apt update -y
+RUN apt install -y software-properties-common wget gnupg git 
+
+RUN echo 'deb http://download.opensuse.org/repositories/shells:/fish/Debian_11/ /' | tee /etc/apt/sources.list.d/shells:fish.list
+RUN curl -fsSL https://download.opensuse.org/repositories/shells:fish/Debian_11/Release.key | gpg --dearmor | tee /etc/apt/trusted.gpg.d/shells_fish.gpg > /dev/null
+RUN apt update
+RUN apt install -y fish
+RUN chsh -s /usr/bin/fish   
+
+RUN dotnet dev-certs https --trust
+
+CMD dotnet run --urls http://0.0.0.0:80
