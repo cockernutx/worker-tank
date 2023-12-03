@@ -5,6 +5,7 @@ using WorkerTankApi.Database;
 using System.Security.Claims;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.EntityFrameworkCore;
 namespace WorkerTankApi.Endpoints.Jobs;
 
 public static class JobsModule
@@ -15,26 +16,23 @@ public static class JobsModule
         group.MapPost("/request_jobs/", RequestJobs);
         group.MapGet("/get_job/{jobId}", GetJob);
 
-        group.AllowAnonymous();
-
-        var workersOnlyGroup = group.MapGroup("/workers_only");
+        var workersOnlyGroup = group.MapGroup("/workers_only").RequireAuthorization();        
         workersOnlyGroup.MapGet("/fetch_jobs", FetchJobs);
         workersOnlyGroup.MapPatch("/processing/{uuid}", ProcessingJob);
         workersOnlyGroup.MapPatch("/finish/{uuid}", FinishJob);
-        workersOnlyGroup.RequireAuthorization();
     }
 
     public record JobRequest(string WorkerName, JsonDocument JobData);
     public static Results<Created, NotFound<string>> RequestJobs(JobRequest jobRequest, WorkerTankContext workerTankContext)
     {
-        var worker = workerTankContext.Workers.Single(w => w.Name == jobRequest.WorkerName);
+        var worker = workerTankContext.Workers.SingleOrDefault(w => w.Name == jobRequest.WorkerName);
         if (worker == null) return TypedResults.NotFound("Worker not found!");
 
         var job = new Job()
         {
             Worker = worker,
             Status = Database.JobStatus.Requested,
-            JobData = jobRequest.JobData.ToString()!
+            JobData = JsonSerializer.Serialize(jobRequest.JobData)
         };
         worker.Jobs.Add(job);
 
@@ -43,12 +41,18 @@ public static class JobsModule
         return TypedResults.Created($"/jobs/get_job/{job.Id}");
     }
     public record JobInfo(Guid Id, string WorkerName, JobStatus Status, JsonDocument? JobData, JsonDocument? JobResult);
-    public static Results<Ok<JobInfo>, NotFound> GetJob(Guid jobId, WorkerTankContext workerTankContext) =>
-        workerTankContext.Jobs.Single(job => job.Id == jobId) is Job job ? TypedResults.Ok(new JobInfo(job.Id, job.Worker.Name, job.Status, JsonSerializer.Deserialize<JsonDocument>(job.JobData), JsonSerializer.Deserialize<JsonDocument>(job.JobResult == null ? "{}" : job.JobResult))) : TypedResults.NotFound();
+    public static Results<Ok<JobInfo>, NotFound> GetJob(Guid jobId, WorkerTankContext workerTankContext)
+    {
+        var j = workerTankContext.Jobs.Where(job => job.Id == jobId).Include(job => job.Worker).SingleOrDefault();
+        if (j == null) return TypedResults.NotFound();
+        var worker = j.Worker;
+        return TypedResults.Ok(new JobInfo(j.Id, worker.Name, j.Status, JsonSerializer.Deserialize<JsonDocument>(j.JobData), JsonSerializer.Deserialize<JsonDocument>(j.JobResult == null ? "{}" : j.JobResult)));
 
+    }
     public static Ok<List<JobInfo>> FetchJobs(ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
+        var workerName = claims.Claims.First(x => x.Type == "WorkerName").Value;
+        var worker = workerTankContext.Workers.Where(w => w.Name == workerName).Include(w => w.Jobs).Single();
 
         return TypedResults.Ok(worker.Jobs.Select(j => new JobInfo(j.Id, j.Worker.Name, j.Status, JsonSerializer.Deserialize<JsonDocument>(j.JobData), JsonSerializer.Deserialize<JsonDocument>(j.JobResult == null ? "{}" : j.JobResult))).ToList());
     }
@@ -56,9 +60,8 @@ public static class JobsModule
     public record WorkerInfo(string WorkerName, Guid Pass);
     public static Results<Ok, NotFound<string>> ProcessingJob(Guid uuid, ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
-
-        var job = worker.Jobs.Single(j => j.Id == uuid);
+        var workerName = claims.Claims.First(x => x.Type == "WorkerName").Value;
+        var job = workerTankContext.Jobs.Where(j => j.Id == uuid && j.Worker.Name == workerName).Include(j => j.Worker).SingleOrDefault();
         if (job == null) return TypedResults.NotFound("Job not found!");
 
         job.Status = JobStatus.Processing;
@@ -69,13 +72,12 @@ public static class JobsModule
     }
     public static Results<Ok, NotFound<string>> FinishJob(Guid uuid, JsonDocument jobResult, ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
-
-        var job = worker.Jobs.Single(j => j.Id == uuid);
+              var workerName = claims.Claims.First(x => x.Type == "WorkerName").Value;
+        var job = workerTankContext.Jobs.Where(j => j.Id == uuid && j.Worker.Name == workerName).Include(j => j.Worker).SingleOrDefault();
         if (job == null) return TypedResults.NotFound("Job not found!");
 
         job.Status = JobStatus.Finished;
-        job.JobResult = jobResult.ToString();
+        job.JobResult = JsonSerializer.Serialize(jobResult);
 
         workerTankContext.SaveChanges();
         return TypedResults.Ok();
