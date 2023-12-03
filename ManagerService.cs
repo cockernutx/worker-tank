@@ -38,7 +38,8 @@ public class ManagerService
 
     public Guid AddJob(string worker, dynamic data)
     {
-        CheckWorker(worker);
+        var we = WorkerExists(worker);
+        if(!we) throw new WorkerNotFoundException();
         var uuid = Guid.NewGuid();
         jobs.Add(new JobInfo
         {
@@ -86,14 +87,7 @@ public class ManagerService
         return (fnd, idx);
 
     }
-    private void CheckWorker(string worker)
-    {
-        if (!workersList.ContainsKey(worker))
-        {
-            throw new WorkerNotFoundException();
-        }
-
-    }
+    private bool WorkerExists(string worker) => workersList.ContainsKey(worker);
 
     public class JobNotFoundException : Exception
     {

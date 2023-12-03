@@ -5,7 +5,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <RootNamespace>file_tank_api</RootNamespace>
+    <RootNamespace>WorkerTankApi</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
