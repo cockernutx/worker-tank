@@ -4,6 +4,7 @@ using System.Diagnostics;
 using WorkerTankApi.Database;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 namespace WorkerTankApi.Endpoints.Jobs;
 
 public static class JobsModule

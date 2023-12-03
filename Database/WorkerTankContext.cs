@@ -5,6 +5,7 @@ using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace WorkerTankApi.Database;
 
@@ -25,7 +26,7 @@ public class WorkerTankContext : DbContext
        protected override void OnConfiguring(DbContextOptionsBuilder options)
         => options.UseNpgsql($"User ID=worker_tank;Password=worker_tank_aAVIY@20SDnVV3;Host=db;Port=5432;Database=worker_tank;Pooling=true;");
 }
-
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum JobStatus
 {
     Requested,
@@ -37,6 +38,8 @@ public record Job
 {
     public Guid Id { get; init; } = new Guid();
     public required Worker Worker {get; init;}
+
+    [Column(TypeName = "varchar")]
     public required JobStatus Status { get; set; }
     [Column(TypeName = "jsonb")]
     public required string JobData { get; set; }
