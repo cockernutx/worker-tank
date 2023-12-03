@@ -30,19 +30,19 @@ public static class JobsModule
     public static Results<Ok<JobInfo>, NotFound> GetJob(Guid jobId, ManagerService manager) =>
         manager.FindJob(jobId) is JobInfo job ? TypedResults.Ok(job) : TypedResults.NotFound();
 
-    public static Results<Ok<List<JobInfo>>, UnauthorizedHttpResult> FetchJobs(string workerName, Guid pass, ManagerService jobManager)
+    public static Results<Ok<List<JobInfo>>, ForbidHttpResult> FetchJobs(string workerName, Guid pass, ManagerService jobManager)
     {
         bool workerValidation = jobManager.ValidateWorker(workerName, pass);
-        if (!workerValidation) return TypedResults.Unauthorized();
+        if (!workerValidation) return TypedResults.Forbid();
 
         return TypedResults.Ok(jobManager.WorkerJobs(workerName));
     }
 
     public record WorkerInfo(string WorkerName, Guid Pass);
-    public static Results<Ok, NotFound<string>, UnauthorizedHttpResult> ProcessingJob(Guid uuid, WorkerInfo workerInfo, ManagerService manager)
+    public static Results<Ok, NotFound<string>, ForbidHttpResult> ProcessingJob(Guid uuid, WorkerInfo workerInfo, ManagerService manager)
     {
         bool workerValidation = manager.ValidateWorker(workerInfo.WorkerName, workerInfo.Pass);
-        if (!workerValidation) return TypedResults.Unauthorized();
+        if (!workerValidation) return TypedResults.Forbid();
         try
         {
             manager.ChangeJobStatus(JobStatus.Processing, uuid);
@@ -54,10 +54,10 @@ public static class JobsModule
         return TypedResults.Ok();
     }
     public record FinishJobRequest(string WorkerName, Guid Pass, dynamic? JobData);
-    public static Results<Ok, NotFound<string>, UnauthorizedHttpResult> FinishJob(Guid uuid, FinishJobRequest finishInfo, ManagerService manager)
+    public static Results<Ok, NotFound<string>, ForbidHttpResult> FinishJob(Guid uuid, FinishJobRequest finishInfo, ManagerService manager)
     {
         bool workerValidation = manager.ValidateWorker(finishInfo.WorkerName, finishInfo.Pass);
-        if (!workerValidation) return TypedResults.Unauthorized();
+        if (!workerValidation) return TypedResults.Forbid();
         try
         {
             manager.FinishJob(uuid, finishInfo.JobData);
