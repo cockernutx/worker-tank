@@ -9,6 +9,8 @@ builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<WorkerTankApi.Services.ManagerService>();
 
+
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

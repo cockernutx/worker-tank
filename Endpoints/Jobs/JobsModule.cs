@@ -13,9 +13,14 @@ public static class JobsModule
 
         group.MapPost("/request_jobs/", RequestJobs);
         group.MapGet("/get_job/{jobId}", GetJob);
-        group.MapGet("/fetch_jobs", FetchJobs);
-        group.MapPatch("/processing/{uuid}", ProcessingJob);
-        group.MapPatch("/finish/{uuid}", FinishJob);
+
+        var workersOnlyGroup = group.MapGroup("/workers_only");
+
+        workersOnlyGroup.MapGet("/fetch_jobs", FetchJobs);
+        workersOnlyGroup.MapPatch("/processing/{uuid}", ProcessingJob);
+        workersOnlyGroup.MapPatch("/finish/{uuid}", FinishJob);
+
+
     }
 
     public record JobRequest(string WorkerName, dynamic JobData);
