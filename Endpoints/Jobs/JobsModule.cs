@@ -1,8 +1,9 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
-using WorkerTankApi.Services;
-using WorkerTankApi.Models;
 using System.Diagnostics;
+using WorkerTankApi.Database;
+using System.Security.Claims;
+using System.Text.Json;
 namespace WorkerTankApi.Endpoints.Jobs;
 
 public static class JobsModule
@@ -10,67 +11,72 @@ public static class JobsModule
     public static void AddJobsEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/jobs");
-
         group.MapPost("/request_jobs/", RequestJobs);
         group.MapGet("/get_job/{jobId}", GetJob);
 
-        var workersOnlyGroup = group.MapGroup("/workers_only");
+        group.AllowAnonymous();
 
+        var workersOnlyGroup = group.MapGroup("/workers_only");
         workersOnlyGroup.MapGet("/fetch_jobs", FetchJobs);
         workersOnlyGroup.MapPatch("/processing/{uuid}", ProcessingJob);
         workersOnlyGroup.MapPatch("/finish/{uuid}", FinishJob);
-
-
+        workersOnlyGroup.RequireAuthorization();
     }
 
-    public record JobRequest(string WorkerName, dynamic JobData);
-    public static Results<Created, NotFound<string>> RequestJobs(JobRequest jobRequest, ManagerService managerService)
+    public record JobRequest(string WorkerName, JsonDocument JobData);
+    public static Results<Created, NotFound<string>> RequestJobs(JobRequest jobRequest, WorkerTankContext workerTankContext)
     {
-        Guid uuid;
-        try { uuid = managerService.AddJob(jobRequest.WorkerName, jobRequest.JobData); }
-        catch { return TypedResults.NotFound("Worker not found!"); }
-        return TypedResults.Created($"/jobs/get_job/{uuid}");
+        var worker = workerTankContext.Workers.Single(w => w.Name == jobRequest.WorkerName);
+        if (worker == null) return TypedResults.NotFound("Worker not found!");
+
+        var job = new Job()
+        {
+            Worker = worker,
+            Status = Database.JobStatus.Requested,
+            JobData = jobRequest.JobData.ToString()!
+        };
+        worker.Jobs.Add(job);
+
+        workerTankContext.SaveChanges();
+
+        return TypedResults.Created($"/jobs/get_job/{job.Id}");
     }
+    public record JobInfo(Guid Id, string WorkerName, JobStatus Status, JsonDocument? JobData, JsonDocument? JobResult);
+    public static Results<Ok<JobInfo>, NotFound> GetJob(Guid jobId, WorkerTankContext workerTankContext) =>
+        workerTankContext.Jobs.Single(job => job.Id == jobId) is Job job ? TypedResults.Ok(new JobInfo(job.Id, job.Worker.Name, job.Status, JsonSerializer.Deserialize<JsonDocument>(job.JobData), JsonSerializer.Deserialize<JsonDocument>(job.JobResult == null ? "{}" : job.JobResult))) : TypedResults.NotFound();
 
-    public static Results<Ok<JobInfo>, NotFound> GetJob(Guid jobId, ManagerService manager) =>
-        manager.FindJob(jobId) is JobInfo job ? TypedResults.Ok(job) : TypedResults.NotFound();
-
-    public static Results<Ok<List<JobInfo>>, ForbidHttpResult> FetchJobs(string workerName, Guid pass, ManagerService jobManager)
+    public static Ok<List<JobInfo>> FetchJobs(ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        bool workerValidation = jobManager.ValidateWorker(workerName, pass);
-        if (!workerValidation) return TypedResults.Forbid();
+        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
 
-        return TypedResults.Ok(jobManager.WorkerJobs(workerName));
+        return TypedResults.Ok(worker.Jobs.Select(j => new JobInfo(j.Id, j.Worker.Name, j.Status, JsonSerializer.Deserialize<JsonDocument>(j.JobData), JsonSerializer.Deserialize<JsonDocument>(j.JobResult == null ? "{}" : j.JobResult))).ToList());
     }
 
     public record WorkerInfo(string WorkerName, Guid Pass);
-    public static Results<Ok, NotFound<string>, ForbidHttpResult> ProcessingJob(Guid uuid, WorkerInfo workerInfo, ManagerService manager)
+    public static Results<Ok, NotFound<string>> ProcessingJob(Guid uuid, ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        bool workerValidation = manager.ValidateWorker(workerInfo.WorkerName, workerInfo.Pass);
-        if (!workerValidation) return TypedResults.Forbid();
-        try
-        {
-            manager.ChangeJobStatus(JobStatus.Processing, uuid);
-        }
-        catch
-        {
-            return TypedResults.NotFound("Job not found");
-        }
+        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
+
+        var job = worker.Jobs.Single(j => j.Id == uuid);
+        if (job == null) return TypedResults.NotFound("Job not found!");
+
+        job.Status = JobStatus.Processing;
+
+        workerTankContext.SaveChanges();
+
         return TypedResults.Ok();
     }
-    public record FinishJobRequest(string WorkerName, Guid Pass, dynamic? JobData);
-    public static Results<Ok, NotFound<string>, ForbidHttpResult> FinishJob(Guid uuid, FinishJobRequest finishInfo, ManagerService manager)
+    public static Results<Ok, NotFound<string>> FinishJob(Guid uuid, JsonDocument jobResult, ClaimsPrincipal claims, WorkerTankContext workerTankContext)
     {
-        bool workerValidation = manager.ValidateWorker(finishInfo.WorkerName, finishInfo.Pass);
-        if (!workerValidation) return TypedResults.Forbid();
-        try
-        {
-            manager.FinishJob(uuid, finishInfo.JobData);
-        }
-        catch
-        {
-            return TypedResults.NotFound("Job not found");
-        }
+        var worker = workerTankContext.Workers.Single(w => w.Name == claims.Claims.First(x => x.Type == "WorkerName").Value);
+
+        var job = worker.Jobs.Single(j => j.Id == uuid);
+        if (job == null) return TypedResults.NotFound("Job not found!");
+
+        job.Status = JobStatus.Finished;
+        job.JobResult = jobResult.ToString();
+
+        workerTankContext.SaveChanges();
         return TypedResults.Ok();
     }
 
